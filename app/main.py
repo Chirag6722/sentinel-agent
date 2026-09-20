@@ -13,7 +13,7 @@ from pydantic import BaseModel
 
 from . import db
 from .agent import AgentRunner
-from .config import settings
+from .config import reload_settings, settings
 from .guardrails import Policy, scan_for_injection
 from .llm import make_provider
 
@@ -176,6 +176,22 @@ async def stop(run_id: str):
         raise HTTPException(404, "run not live")
     runner.stop(run_id)
     return {"ok": True}
+
+
+@app.post("/api/policy/reload")
+async def policy_reload():
+    reload_settings()
+    runner.policy = Policy()
+    return {
+        "ok": True,
+        "limits": {
+            "refund_auto_limit": settings.refund_auto_limit,
+            "refund_approval_limit": settings.refund_approval_limit,
+            "refund_run_cap": settings.refund_run_cap,
+            "max_steps": settings.max_steps,
+            "max_tool_calls": settings.max_tool_calls,
+        },
+    }
 
 
 @app.post("/api/reset")

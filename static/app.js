@@ -86,6 +86,12 @@ $("#run").onclick = async () => {
 };
 
 $("#stop").onclick = () => currentRun && api(`/api/runs/${currentRun}/stop`, { method: "POST" });
+$("#reload-policy").onclick = async () => {
+  const r = await api("/api/policy/reload", { method: "POST" });
+  const meta = await api("/api/meta");
+  $("#policy").innerHTML = meta.policy.map((p) => `<li><b>${esc(p.id)}</b>${esc(p.text)}</li>`).join("");
+  alert(`Policy reloaded. auto_limit=$${r.limits.refund_auto_limit} approval_limit=$${r.limits.refund_approval_limit}`);
+};
 $("#reset").onclick = async () => { await api("/api/reset", { method: "POST" }); $("#timeline").innerHTML = ""; setStatus("idle"); $("#approval").classList.add("hidden"); await loadTickets(); await loadWorld(); };
 
 function setStatus(s) {
