@@ -17,6 +17,7 @@ async function boot() {
   $("#policy").innerHTML = meta.policy.map((p) => `<li><b>${esc(p.id)}</b>${esc(p.text)}</li>`).join("");
   await loadTickets();
   await loadWorld();
+  await loadHistory();
 }
 
 async function loadTickets() {
@@ -86,7 +87,7 @@ $("#run").onclick = async () => {
 };
 
 $("#stop").onclick = () => currentRun && api(`/api/runs/${currentRun}/stop`, { method: "POST" });
-$("#reset").onclick = async () => { await api("/api/reset", { method: "POST" }); $("#timeline").innerHTML = ""; setStatus("idle"); $("#approval").classList.add("hidden"); await loadTickets(); await loadWorld(); };
+$("#reset").onclick = async () => { await api("/api/reset", { method: "POST" }); $("#timeline").innerHTML = ""; setStatus("idle"); $("#approval").classList.add("hidden"); await loadTickets(); await loadWorld(); await loadHistory(); };
 
 function setStatus(s) {
   const el = $("#run-status"); el.textContent = s.replace("_", " "); el.className = "chip status-" + s;
@@ -147,7 +148,7 @@ function onEvent(ev) {
       setStatus(ev.status);
       if (["completed", "escalated", "stopped", "error"].includes(ev.status)) {
         cls = "ev-status"; icon = "🏁"; title = `Run ${ev.status}`; sub = esc(ev.summary || "");
-        loadWorld(); loadTickets();
+        loadWorld(); loadTickets(); loadHistory();
       } else return;
       break;
     default: return;
@@ -175,6 +176,45 @@ function showApproval(ev) {
   $("#apr-yes").onclick = () => send(true);
   $("#apr-no").onclick = () => send(false);
   box.scrollIntoView({ behavior: "smooth" });
+}
+
+// ------------------------------------------------------------------ history
+async function loadHistory() {
+  const runs = await api("/api/runs");
+  const el = $("#history");
+  const countEl = $("#history-count");
+  if (!runs.length) {
+    el.innerHTML = '<p class="muted">No runs yet.</p>';
+    countEl.textContent = "";
+    return;
+  }
+  countEl.textContent = runs.length + " run" + (runs.length !== 1 ? "s" : "");
+  el.innerHTML = runs.map((r) => `
+    <div class="card history-row" data-id="${r.id}" style="cursor:pointer">
+      <div class="row-between">
+        <span class="chip status-${r.status}">${esc(r.status)}</span>
+        <span class="chip risk-${r.risk_level || "low"}">${esc(r.risk_level || "low")}</span>
+        <span class="muted" style="font-size:.75rem">${esc((r.started_at || "").slice(0, 19).replace("T", " "))}</span>
+      </div>
+      <div><code>${esc(r.ticket_id)}</code> · <span class="muted">${esc(r.provider)}</span></div>
+      ${r.summary ? `<div class="muted" style="font-size:.8rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(r.summary)}</div>` : ""}
+    </div>`).join("");
+  el.querySelectorAll(".history-row").forEach((row) => row.onclick = () => openHistoricRun(row.dataset.id));
+}
+
+async function openHistoricRun(runId) {
+  const run = await api("/api/runs/" + runId);
+  currentRun = run.id;
+  selected = run.ticket_id;
+  $("#timeline").innerHTML = "";
+  $("#approval").classList.add("hidden");
+  $("#audit").classList.remove("hidden"); $("#audit").href = `/api/runs/${runId}/audit.json`;
+  setStatus(run.status);
+  if (run.risk_level) setRisk(run.risk_level);
+  if (es) { es.close(); es = null; }
+  run.events.forEach(onEvent);
+  document.querySelectorAll(".ticket").forEach((el) => el.classList.toggle("active", el.dataset.id === run.ticket_id));
+  $("#ticket-detail").classList.add("hidden");
 }
 
 boot();
