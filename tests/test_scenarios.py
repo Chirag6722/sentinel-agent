@@ -147,3 +147,35 @@ def test_cannot_finish_with_a_fused_tool_until_escalated():
     assert (d.verdict, d.rule) == ("DENY", "unresolved-failure")
     ctx.escalated = True
     assert Policy().evaluate(ctx, "finish", {"summary": "escalated"}).verdict == "ALLOW"
+
+
+
+
+@pytest.mark.asyncio
+async def test_stop_cancels_pending_approval_cleanly():
+    runner = AgentRunner(MockProvider(), Policy())
+    run = runner.start("T-102")
+
+    # Wait until the run reaches the approval gate.
+    for _ in range(200):
+        await asyncio.sleep(0.02)
+        if run.pending:
+            break
+
+    assert run.pending is not None
+    assert run.status == "awaiting_approval"
+
+    # Operator stops the run while approval is pending.
+    runner.stop(run.id)
+
+    await asyncio.sleep(0.02)
+
+    assert run.task.done()
+    assert run.status == "stopped"
+    assert run.pending is None
+
+    # Stopping an approval-gated run should resolve the approval
+    # so the UI can remove the approval card.
+    resolved = types(run, "approval_resolved")
+    assert len(resolved) == 1
+    assert resolved[0]["approved"] is False
