@@ -147,6 +147,7 @@ function onEvent(ev) {
       setStatus(ev.status);
       if (["completed", "escalated", "stopped", "error"].includes(ev.status)) {
         cls = "ev-status"; icon = "🏁"; title = `Run ${ev.status}`; sub = esc(ev.summary || "");
+        $("#approval").classList.add("hidden");
         loadWorld(); loadTickets();
       } else return;
       break;
