@@ -72,6 +72,7 @@ class RunState:
     subscribers: list[asyncio.Queue] = field(default_factory=list)
     pending: PendingApproval | None = None
     task: asyncio.Task | None = None
+    stop_requested: bool = False
 
 
 class AgentRunner:
@@ -121,7 +122,11 @@ class AgentRunner:
 
     def stop(self, run_id: str) -> None:
         run = self.runs[run_id]
-        if run.task and not run.task.done():
+        run.stop_requested = True
+        if run.pending and not run.pending.future.done():
+            # Resolve first so _wait_for_human can emit approval_resolved before stopping
+            run.pending.future.set_result((False, "run stopped by operator"))
+        elif run.task and not run.task.done():
             run.task.cancel()
 
     # ------------------------------------------------------------------- loop
@@ -267,5 +272,7 @@ class AgentRunner:
         finally:
             run.pending = None
         self.emit(run, "approval_resolved", approval_id=approval_id, tool=name, approved=approved, note=note)
+        if run.stop_requested:
+            raise asyncio.CancelledError()
         self._set_status(run, "running")
         return approved, note

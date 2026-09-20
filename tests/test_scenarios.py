@@ -139,6 +139,28 @@ async def test_audit_log_is_persisted_in_order():
     assert seqs == list(range(1, len(run.events) + 1))
 
 
+@pytest.mark.asyncio
+async def test_stop_cancels_pending_approval():
+    runner = AgentRunner(MockProvider(), Policy())
+    run = runner.start("T-102")
+    for _ in range(200):
+        await asyncio.sleep(0.02)
+        if run.pending:
+            break
+    assert run.pending is not None, "run never reached approval gate"
+    runner.stop(run.id)
+    for _ in range(50):
+        await asyncio.sleep(0.02)
+        if run.task.done():
+            break
+    assert run.task.done()
+    assert run.status == "stopped"
+    resolved = [e for e in run.events if e["type"] == "approval_resolved"]
+    assert len(resolved) == 1
+    assert resolved[0]["approved"] is False
+    assert world()["refunds"] == []
+
+
 def test_cannot_finish_with_a_fused_tool_until_escalated():
     from app.guardrails import RunContext
     ctx = RunContext(run_id="r", ticket={"id": "T-1"}, customer={"id": "C-1", "email": "x@example.com"},
