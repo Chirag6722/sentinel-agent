@@ -121,6 +121,20 @@ class AgentRunner:
 
     def stop(self, run_id: str) -> None:
         run = self.runs[run_id]
+
+        if run.pending:
+            pending = run.pending
+            if not pending.future.done():
+                pending.future.cancel()
+            self.emit(
+                run,
+                "approval_resolved",
+                approval_id=pending.approval_id,
+                tool=pending.tool,
+                approved=False,
+                note="Stopped by operator",
+            )
+
         if run.task and not run.task.done():
             run.task.cancel()
 
