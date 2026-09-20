@@ -63,7 +63,9 @@ CREATE TABLE IF NOT EXISTS ticket_notes (
   run_id TEXT, created_at TEXT);
 CREATE TABLE IF NOT EXISTS runs (
   id TEXT PRIMARY KEY, ticket_id TEXT, provider TEXT, status TEXT, risk_level TEXT,
-  summary TEXT, started_at TEXT, finished_at TEXT);
+  summary TEXT, started_at TEXT, finished_at TEXT,
+  tokens_in INTEGER DEFAULT 0, tokens_out INTEGER DEFAULT 0, duration_ms INTEGER DEFAULT 0,
+  steps INTEGER DEFAULT 0);
 CREATE TABLE IF NOT EXISTS audit_events (
   id INTEGER PRIMARY KEY AUTOINCREMENT, run_id TEXT, seq INTEGER, ts TEXT,
   type TEXT, payload TEXT);
@@ -120,6 +122,13 @@ def init_db(reset: bool = False) -> None:
             for t in ("customers", "orders", "tickets", "refunds", "emails", "ticket_notes", "runs", "audit_events"):
                 conn.execute(f"DROP TABLE IF EXISTS {t}")
         conn.executescript(SCHEMA)
+        # Live-upgrade: add new columns without requiring a full reset
+        for col_def in ("tokens_in INTEGER DEFAULT 0", "tokens_out INTEGER DEFAULT 0",
+                        "duration_ms INTEGER DEFAULT 0", "steps INTEGER DEFAULT 0"):
+            try:
+                conn.execute(f"ALTER TABLE runs ADD COLUMN {col_def}")
+            except Exception:  # noqa: BLE001 — column already exists
+                pass
         if conn.execute("SELECT COUNT(*) FROM customers").fetchone()[0] == 0:
             ts = now_iso()
             conn.executemany("INSERT INTO customers VALUES (?,?,?,?,?)", [c + (ts,) for c in CUSTOMERS])

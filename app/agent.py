@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time
 import traceback
 import uuid
 from dataclasses import dataclass, field
@@ -72,6 +73,10 @@ class RunState:
     subscribers: list[asyncio.Queue] = field(default_factory=list)
     pending: PendingApproval | None = None
     task: asyncio.Task | None = None
+    tokens_in: int = 0
+    tokens_out: int = 0
+    steps: int = 0
+    started_mono: float = field(default_factory=lambda: time.monotonic() * 1000)
 
 
 class AgentRunner:
@@ -97,10 +102,20 @@ class AgentRunner:
         if summary is not None:
             run.summary = summary
         finished = status in ("completed", "escalated", "stopped", "error")
+        duration_ms = int(time.monotonic() * 1000 - run.started_mono) if finished else 0
         with db.tx() as c:
-            c.execute("UPDATE runs SET status=?, risk_level=?, summary=?, finished_at=? WHERE id=?",
-                      (status, run.risk_level, run.summary, db.now_iso() if finished else None, run.id))
-        self.emit(run, "status", status=status, risk_level=run.risk_level, summary=run.summary)
+            if finished:
+                c.execute(
+                    "UPDATE runs SET status=?, risk_level=?, summary=?, finished_at=?,"
+                    " tokens_in=?, tokens_out=?, duration_ms=?, steps=? WHERE id=?",
+                    (status, run.risk_level, run.summary, db.now_iso(),
+                     run.tokens_in, run.tokens_out, duration_ms, run.steps, run.id))
+            else:
+                c.execute("UPDATE runs SET status=?, risk_level=?, summary=? WHERE id=?",
+                          (status, run.risk_level, run.summary, run.id))
+        self.emit(run, "status", status=status, risk_level=run.risk_level, summary=run.summary,
+                  tokens_in=run.tokens_in, tokens_out=run.tokens_out,
+                  duration_ms=duration_ms, steps=run.steps)
 
     # ---------------------------------------------------------------- control
     def start(self, ticket_id: str) -> RunState:
@@ -160,8 +175,11 @@ class AgentRunner:
 
         nudged = False
         for step in range(1, settings.max_steps + 1):
+            run.steps = step
             self.emit(run, "llm_request", step=step, messages=len(messages))
             resp: LLMResponse = await self.provider.complete(messages, TOOL_SCHEMAS)
+            run.tokens_in += resp.usage.get("prompt_tokens", 0)
+            run.tokens_out += resp.usage.get("completion_tokens", 0)
             self.emit(run, "llm_response", step=step, content=resp.content or "",
                       proposed=[{"id": tc.id, "name": tc.name, "args": tc.arguments} for tc in resp.tool_calls],
                       usage=resp.usage)

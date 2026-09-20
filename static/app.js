@@ -78,6 +78,7 @@ $("#run").onclick = async () => {
   $("#stop").classList.remove("hidden");
   $("#audit").classList.remove("hidden"); $("#audit").href = `/api/runs/${run_id}/audit.json`;
   $("#run-risk").classList.add("hidden");
+  $("#run-stats").classList.add("hidden"); $("#run-stats").textContent = "";
   setStatus("running");
   if (es) es.close();
   es = new EventSource(`/api/runs/${run_id}/stream`);
@@ -147,6 +148,16 @@ function onEvent(ev) {
       setStatus(ev.status);
       if (["completed", "escalated", "stopped", "error"].includes(ev.status)) {
         cls = "ev-status"; icon = "🏁"; title = `Run ${ev.status}`; sub = esc(ev.summary || "");
+        if (ev.steps || ev.tokens_in || ev.duration_ms) {
+          const tk = (ev.tokens_in || 0) + (ev.tokens_out || 0);
+          const statsEl = $("#run-stats");
+          statsEl.textContent = [
+            ev.steps ? `${ev.steps} step${ev.steps !== 1 ? "s" : ""}` : null,
+            tk ? `${(tk / 1000).toFixed(1)}k tok` : null,
+            ev.duration_ms ? `${(ev.duration_ms / 1000).toFixed(1)}s` : null,
+          ].filter(Boolean).join(" · ");
+          statsEl.classList.remove("hidden");
+        }
         loadWorld(); loadTickets();
       } else return;
       break;
