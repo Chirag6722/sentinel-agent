@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sentinel — guardrailed support agent</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header>
+  <div class="brand">
+    <span class="logo">◈</span>
+    <div>
+      <h1>Sentinel</h1>
+      <p>An AI support agent that acts — but never recklessly. Every action is proposed by the model, judged by policy, and logged.</p>
+    </div>
+  </div>
+  <div class="hdr-right">
+    <span class="badge" id="provider">provider: …</span>
+    <button class="ghost" id="reset">Reset demo data</button>
+  </div>
+</header>
+
+<main>
+  <!-- ------------------------------------------------ tickets -->
+  <section class="col col-left">
+    <h2>Inbox <span class="muted">synthetic tickets</span></h2>
+    <div id="tickets"></div>
+    <div id="ticket-detail" class="card hidden">
+      <div class="row-between">
+        <strong id="td-subject"></strong>
+        <span id="td-tag" class="chip"></span>
+      </div>
+      <div class="muted" id="td-meta"></div>
+      <pre id="td-body" class="ticket-body"></pre>
+      <div id="td-findings" class="findings"></div>
+      <button id="run" class="primary">▶ Run agent on this ticket</button>
+    </div>
+  </section>
+
+  <!-- ------------------------------------------------ run -->
+  <section class="col col-mid">
+    <div class="row-between">
+      <h2>Agent run</h2>
+      <div class="row">
+        <span id="run-status" class="chip status-idle">idle</span>
+        <span id="run-risk" class="chip risk-low hidden">risk: low</span>
+        <button id="stop" class="ghost danger hidden">■ Stop</button>
+        <a id="audit" class="ghost hidden" download>⤓ Audit JSON</a>
+      </div>
+    </div>
+    <div id="approval" class="card approval hidden"></div>
+    <div id="timeline" class="timeline">
+      <p class="muted empty">Pick a ticket on the left and run the agent. Every model step, policy decision, tool call and approval will appear here in real time.</p>
+    </div>
+  </section>
+
+  <!-- ------------------------------------------------ policy + world -->
+  <section class="col col-right">
+    <h2>Guardrail policy</h2>
+    <ol id="policy" class="policy"></ol>
+    <h2>Shop state <span class="muted">side effects</span></h2>
+    <div id="world"></div>
+  </section>
+</main>
+<script src="/static/app.js"></script>
+</body>
+</html>
