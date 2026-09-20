@@ -50,17 +50,49 @@ class LLMProvider(Protocol):
 # Groq
 # ---------------------------------------------------------------------------
 class GroqProvider:
+    """Groq via the OpenAI-compatible endpoint.
+
+    Free-tier quotas are per model and small (~8k tokens/min), so a 429 is a
+    normal event, not an error: we parse the suggested wait, and if there is a
+    fallback model (each has its own quota) we fail over to it rather than
+    stalling the run. Which model actually answered is recorded in `usage`.
+    """
     name = "groq"
 
-    def __init__(self, api_key: str, model: str) -> None:
+    def __init__(self, api_key: str, model: str, fallbacks: list[str] | tuple[str, ...] = ()) -> None:
         from openai import AsyncOpenAI  # imported lazily so the mock path has no SDK dependency
-        self.client = AsyncOpenAI(api_key=api_key, base_url="https://api.groq.com/openai/v1")
-        self.model = model
+        self.client = AsyncOpenAI(api_key=api_key, base_url="https://api.groq.com/openai/v1", max_retries=0)
+        self.models = [model] + [m for m in fallbacks if m != model]
         self.name = f"groq:{model}"
 
     async def complete(self, messages: list[dict[str, Any]], tools: list[dict[str, Any]]) -> LLMResponse:
-        resp = await self.client.chat.completions.create(
-            model=self.model, messages=messages, tools=tools, tool_choice="auto", temperature=0.1)
+        import asyncio
+        from openai import APIStatusError, RateLimitError
+
+        last_err: Exception | None = None
+        for attempt in range(6):
+            model = self.models[min(attempt, len(self.models) - 1)]
+            try:
+                resp = await self.client.chat.completions.create(
+                    model=model, messages=messages, tools=tools, tool_choice="auto", temperature=0.1)
+                return self._parse(resp, model)
+            except RateLimitError as e:
+                last_err = e
+                if attempt + 1 < len(self.models):
+                    continue  # next model has its own quota: fail over immediately
+                await asyncio.sleep(min(_suggested_wait(str(e)), 30.0))
+            except APIStatusError as e:
+                # 400 "tool call validation failed": the model emitted a malformed
+                # tool name (a known gpt-oss quirk on Groq). Retry / fail over.
+                malformed = e.status_code == 400 and "tool call validation" in str(e).lower()
+                if e.status_code not in (500, 502, 503) and not malformed:
+                    raise
+                last_err = e
+                await asyncio.sleep(0 if malformed else 1.5 * (attempt + 1))
+        raise RuntimeError(f"LLM unavailable after retries: {last_err}")
+
+    @staticmethod
+    def _parse(resp: Any, model: str) -> LLMResponse:
         choice = resp.choices[0].message
         calls: list[ToolCall] = []
         for tc in choice.tool_calls or []:
@@ -69,10 +101,18 @@ class GroqProvider:
             except json.JSONDecodeError:
                 args = {"_raw": tc.function.arguments}
             calls.append(ToolCall(tc.id, tc.function.name, args))
-        usage = {}
+        usage: dict[str, Any] = {"model": model}
         if resp.usage:
-            usage = {"prompt_tokens": resp.usage.prompt_tokens, "completion_tokens": resp.usage.completion_tokens}
+            usage.update(prompt_tokens=resp.usage.prompt_tokens, completion_tokens=resp.usage.completion_tokens)
         return LLMResponse(choice.content, calls, usage)
+
+
+def _suggested_wait(msg: str) -> float:
+    """Groq 429 bodies say e.g. 'Please try again in 12.3s' or '1m2.5s'."""
+    m = re.search(r"try again in (?:(\d+)m)?([\d.]+)s", msg)
+    if not m:
+        return 10.0
+    return float(m.group(1) or 0) * 60 + float(m.group(2))
 
 
 # ---------------------------------------------------------------------------
@@ -206,5 +246,5 @@ class MockProvider:
 
 def make_provider() -> LLMProvider:
     if settings.provider_name == "groq":
-        return GroqProvider(settings.groq_api_key, settings.groq_model)
+        return GroqProvider(settings.groq_api_key, settings.groq_model, settings.groq_fallback_models)
     return MockProvider()

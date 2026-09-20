@@ -137,3 +137,13 @@ async def test_audit_log_is_persisted_in_order():
     with db.tx() as c:
         seqs = [r[0] for r in c.execute("SELECT seq FROM audit_events WHERE run_id=? ORDER BY seq", (run.id,))]
     assert seqs == list(range(1, len(run.events) + 1))
+
+
+def test_cannot_finish_with_a_fused_tool_until_escalated():
+    from app.guardrails import RunContext
+    ctx = RunContext(run_id="r", ticket={"id": "T-1"}, customer={"id": "C-1", "email": "x@example.com"},
+                     customer_orders={}, fused_tools={"issue_refund"})
+    d = Policy().evaluate(ctx, "finish", {"summary": "all good"})
+    assert (d.verdict, d.rule) == ("DENY", "unresolved-failure")
+    ctx.escalated = True
+    assert Policy().evaluate(ctx, "finish", {"summary": "escalated"}).verdict == "ALLOW"

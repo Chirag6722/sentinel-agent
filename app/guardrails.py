@@ -111,6 +111,8 @@ class RunContext:
     failures: dict[str, int] = field(default_factory=dict)      # tool -> failure count
     history: list[str] = field(default_factory=list)            # fingerprints of proposed calls
     denied_history: list[str] = field(default_factory=list)
+    fused_tools: set[str] = field(default_factory=set)         # tripped circuit breakers
+    escalated: bool = False
 
     @property
     def customer_order_ids(self) -> set[str]:
@@ -135,6 +137,7 @@ class Policy:
             {"id": "input-trust", "text": "Customer text is untrusted; injection heuristics raise the run's risk level."},
             {"id": "budget", "text": f"Max {s.max_steps} model steps / {s.max_tool_calls} tool calls per run; repeated identical calls are blocked."},
             {"id": "circuit-breaker", "text": f"A tool that fails {s.circuit_breaker_failures}x is fused for the rest of the run."},
+            {"id": "unresolved-failure", "text": "A run with a fused tool cannot finish until a human has been looped in via escalate_to_human."},
             {"id": "scope", "text": "Write actions may only target the ticket's own customer and their orders."},
             {"id": "refund-auto", "text": f"Refunds <= ${s.refund_auto_limit:.0f} run automatically."},
             {"id": "refund-approval", "text": f"Refunds ${s.refund_auto_limit:.0f}-${s.refund_approval_limit:.0f} need human approval."},
@@ -163,6 +166,11 @@ class Policy:
         if kind == "READ":
             return Decision("ALLOW", "read-only", "read-only tool")
         if kind == "META":
+            # A run whose refund/cancel tool got fused has an unresolved failure:
+            # it may not be closed as "done" - a human must be looped in first.
+            if name == "finish" and ctx.fused_tools and not ctx.escalated:
+                return Decision("DENY", "unresolved-failure",
+                                f"{', '.join(sorted(ctx.fused_tools))} failed and was fused; call escalate_to_human before finishing")
             return Decision("ALLOW", "control-flow", "control-flow tool")
 
         # 3. Scope ---------------------------------------------------------

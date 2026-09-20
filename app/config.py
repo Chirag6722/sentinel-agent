@@ -14,8 +14,11 @@ load_dotenv(ROOT / ".env")
 @dataclass(frozen=True)
 class Settings:
     groq_api_key: str = os.getenv("GROQ_API_KEY", "").strip()
-    groq_model: str = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+    groq_model: str = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
     llm_provider: str = os.getenv("LLM_PROVIDER", "auto").strip().lower()
+    # Tried in order when the primary model is rate-limited (each has its own quota).
+    groq_fallback_models: tuple[str, ...] = tuple(
+        m.strip() for m in os.getenv("GROQ_FALLBACK_MODELS", "openai/gpt-oss-20b,qwen/qwen3.8-27b").split(",") if m.strip())
     db_path: Path = ROOT / os.getenv("DB_PATH", "data.db")
 
     # --- agent budget ---------------------------------------------------

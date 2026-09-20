@@ -44,7 +44,7 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
             "reason": {"type": "string", "description": "Short reason shown on the customer's statement"}},
             "required": ["order_id", "amount", "reason"]}}},
     {"type": "function", "function": {
-        "name": "cancel_order", "description": "Cancel an order that has not yet been delivered.",
+        "name": "cancel_order", "description": "Cancel an order. Orders in status processing are cancelled directly; shipped orders can still be recalled (may need approval); delivered orders cannot be cancelled.",
         "parameters": {"type": "object", "properties": {"order_id": {"type": "string"}, "reason": {"type": "string"}},
                        "required": ["order_id", "reason"]}}},
     {"type": "function", "function": {

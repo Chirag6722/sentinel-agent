@@ -110,9 +110,12 @@ function onEvent(ev) {
       setRisk(ev.risk_level); break;
     case "llm_request":
       cls = "ev-llm"; icon = "🧠"; title = `Model step ${ev.step}`; sub = `${ev.messages} messages in context`; break;
+    case "note":
+      cls = "ev-status"; icon = "📝"; title = esc(ev.text); break;
     case "llm_response":
       cls = "ev-llm"; icon = "💬";
       title = ev.content ? esc(ev.content) : "<span class='muted'>(no text)</span>";
+      if (ev.usage && ev.usage.model) title += ` <span class="chip">${esc(ev.usage.model)}${ev.usage.prompt_tokens ? " · " + ev.usage.prompt_tokens + " tok" : ""}</span>`;
       sub = ev.proposed.length ? "proposes: " + ev.proposed.map((p) => `<code>${p.name}(${esc(fmtArgs(p.args))})</code>`).join(", ") : "no tool call";
       break;
     case "policy_decision":
