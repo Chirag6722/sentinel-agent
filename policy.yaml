@@ -1,0 +1,34 @@
+# Sentinel policy configuration
+# Edit these values and click "Reload policy" in the UI (or POST /api/policy/reload).
+# Environment variables still take precedence over values set here.
+
+money:
+  refund_auto_limit: 50.0        # USD — agent may refund autonomously up to this amount
+  refund_approval_limit: 500.0   # USD — human approval required above auto_limit, hard deny above this
+  refund_run_cap: 500.0          # USD — cumulative refund ceiling per run
+
+comms:
+  internal_email_domain: "support.acme-shop.example"
+
+agent:
+  max_steps: 12                  # LLM round-trips per run
+  max_tool_calls: 20             # total tool invocations per run
+  tool_retry_limit: 2            # retries on transient tool failure
+  circuit_breaker_failures: 3    # failures of one tool before it is fused for the run
+
+injection_patterns:
+  - "ignore (all )?(previous|prior|above) instructions?"
+  - "system\\s*:\\s*(you are|act as|your new)"
+  - "you (are|must|should|will) now"
+  - "disregard (your )?(previous|prior|above|earlier)"
+  - "forget (everything|all|your instructions)"
+  - "new (role|persona|identity|instructions|directive)"
+  - "as (an?|your new) (unrestricted|unfiltered|jailbreak)"
+  - "DAN|do anything now"
+  - "\\bsudo\\b"
+  - "pretend (you are|to be|that)"
+  - "act as (if )?you (have no|don't have|lack)"
+  - "approved by (management|admin|supervisor|anthropic|openai)"
+  - "\\[system\\]|<system>|<<SYS>>"
+  - "this is a test|ignore safety|bypass (filter|guard|policy)"
+  - "transfer.*\\$|send.*\\$.*to"
