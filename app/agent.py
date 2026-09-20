@@ -13,8 +13,8 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any
 
+from . import config as _cfg
 from . import db
-from .config import settings
 from .guardrails import Policy, RunContext, fingerprint, risk_from_findings, scan_for_injection
 from .llm import LLMProvider, LLMResponse
 from .tools import TOOL_KIND, TOOL_SCHEMAS, ToolError, TransientToolError, execute
@@ -159,7 +159,7 @@ class AgentRunner:
         ]
 
         nudged = False
-        for step in range(1, settings.max_steps + 1):
+        for step in range(1, _cfg.settings.max_steps + 1):
             self.emit(run, "llm_request", step=step, messages=len(messages))
             resp: LLMResponse = await self.provider.complete(messages, TOOL_SCHEMAS)
             self.emit(run, "llm_response", step=step, content=resp.content or "",
@@ -194,7 +194,7 @@ class AgentRunner:
                 if terminal:
                     return
 
-        self.emit(run, "safe_stop", reason=f"step budget of {settings.max_steps} exhausted")
+        self.emit(run, "safe_stop", reason=f"step budget of {_cfg.settings.max_steps} exhausted")
         self._set_status(run, "stopped", "Step budget exhausted; ticket left open for a human.")
 
     async def _handle_call(self, run: RunState, ctx: RunContext, name: str, args: dict[str, Any]) -> tuple[dict, bool]:
@@ -223,14 +223,14 @@ class AgentRunner:
             except TransientToolError as e:
                 ctx.failures[name] = ctx.failures.get(name, 0) + 1
                 self.emit(run, "tool_failed", tool=name, args=args, attempt=attempts, transient=True, error=str(e))
-                if ctx.failures[name] >= settings.circuit_breaker_failures:
+                if ctx.failures[name] >= _cfg.settings.circuit_breaker_failures:
                     ctx.fused_tools.add(name)
-                if attempts > settings.tool_retry_limit:
+                if attempts > _cfg.settings.tool_retry_limit:
                     return {"error": f"tool failed after {attempts} attempts: {e}"}, False
                 await asyncio.sleep(0.3 * attempts)
             except ToolError as e:
                 ctx.failures[name] = ctx.failures.get(name, 0) + 1
-                if ctx.failures[name] >= settings.circuit_breaker_failures:
+                if ctx.failures[name] >= _cfg.settings.circuit_breaker_failures:
                     ctx.fused_tools.add(name)
                 self.emit(run, "tool_failed", tool=name, args=args, attempt=attempts, transient=False, error=str(e))
                 return {"error": str(e)}, False

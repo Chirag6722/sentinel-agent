@@ -22,7 +22,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
-from .config import settings
+from . import config as _cfg
 from .tools import TOOL_KIND
 
 Verdict = Literal["ALLOW", "REQUIRE_APPROVAL", "DENY"]
@@ -128,7 +128,11 @@ def fingerprint(name: str, args: dict[str, Any]) -> str:
 # ---------------------------------------------------------------------------
 class Policy:
     def __init__(self) -> None:
-        self.s = settings
+        pass
+
+    @property
+    def s(self):
+        return _cfg.settings
 
     def describe(self) -> list[dict[str, str]]:
         """Human-readable rule list for the UI."""

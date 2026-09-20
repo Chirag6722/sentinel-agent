@@ -11,9 +11,10 @@ from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from . import config as _cfg
 from . import db
 from .agent import AgentRunner
-from .config import reload_settings, settings
+from .config import reload_settings
 from .guardrails import Policy, scan_for_injection
 from .llm import make_provider
 
@@ -39,14 +40,15 @@ app = FastAPI(title="Sentinel - guardrailed support agent", lifespan=lifespan)
 # ----------------------------------------------------------------------------- reads
 @app.get("/api/meta")
 def meta():
+    s = _cfg.settings
     return {
         "provider": runner.provider.name,
         "policy": runner.policy.describe(),
         "limits": {
-            "refund_auto_limit": settings.refund_auto_limit,
-            "refund_approval_limit": settings.refund_approval_limit,
-            "refund_run_cap": settings.refund_run_cap,
-            "max_steps": settings.max_steps, "max_tool_calls": settings.max_tool_calls,
+            "refund_auto_limit": s.refund_auto_limit,
+            "refund_approval_limit": s.refund_approval_limit,
+            "refund_run_cap": s.refund_run_cap,
+            "max_steps": s.max_steps, "max_tool_calls": s.max_tool_calls,
         },
     }
 
@@ -182,14 +184,15 @@ async def stop(run_id: str):
 async def policy_reload():
     reload_settings()
     runner.policy = Policy()
+    s = _cfg.settings  # read after reload so response reflects new values
     return {
         "ok": True,
         "limits": {
-            "refund_auto_limit": settings.refund_auto_limit,
-            "refund_approval_limit": settings.refund_approval_limit,
-            "refund_run_cap": settings.refund_run_cap,
-            "max_steps": settings.max_steps,
-            "max_tool_calls": settings.max_tool_calls,
+            "refund_auto_limit": s.refund_auto_limit,
+            "refund_approval_limit": s.refund_approval_limit,
+            "refund_run_cap": s.refund_run_cap,
+            "max_steps": s.max_steps,
+            "max_tool_calls": s.max_tool_calls,
         },
     }
 
